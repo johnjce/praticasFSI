@@ -1,3 +1,6 @@
+import gzip
+import _pickle
+
 import tensorflow as tf
 import numpy as np
 
@@ -18,77 +21,54 @@ def one_hot(x, n):
     return o_h
 
 
-data = np.genfromtxt('iris.data', delimiter=",")  # iris.data file loading
-np.random.shuffle(data)  # we shuffle the data
+f = gzip.open('mnist.pkl.gz', 'rb')
+train_set, valid_set, test_set = _pickle.load(f, encoding='latin1')
+f.close()
+print(train_set)
+xDataTrain, yttr = train_set
+yDataTrain = one_hot(yttr, 10)
 
-x_data = data[:, 0:4].astype('f4')  # the samples are the four first rows of data
-y_data = one_hot(data[:, 4].astype(int), 3)  # the labels are in the last row. Then we encode them in one hot code
+xDataValid, ytv = valid_set
+yDataValid = one_hot(ytv, 10)
 
-x_dataTrain = x_data[0:105]
-y_dataTrain = y_data[0:105]
+xDataTest, ytte = test_set
+yDataTest = one_hot(ytte, 10)
 
-x_dataVal = x_data[105:128]
-y_dataVal = y_data[105:128]
+# TODO: the neural net!!
+x = tf.placeholder("float", [None, 784])
+y_ = tf.placeholder("float", [None, 10])
 
-x_dataTest = x_data[128:]
-y_dataTest = y_data[128:]
+W = tf.Variable(tf.zeros([784, 10]))
+b = tf.Variable(tf.zeros([10]))
 
-print ("\nSome samples...")
-for i in range(20):
-    print (x_data[i], " -> ", y_data[i])
-print
-
-x = tf.placeholder("float", [None, 4])  # samples
-y_ = tf.placeholder("float", [None, 3])  # labels
-
-W1 = tf.Variable(np.float32(np.random.rand(4, 5)) * 0.1)
-b1 = tf.Variable(np.float32(np.random.rand(5)) * 0.1)
-
-W2 = tf.Variable(np.float32(np.random.rand(5, 3)) * 0.1)
-b2 = tf.Variable(np.float32(np.random.rand(3)) * 0.1)
-
-#h = tf.nn.sigmoid(tf.matmul(x, W1) + b1)
-h = tf.matmul(x, W1) + b1  # Try this!
-y = tf.nn.softmax(tf.matmul(h, W2) + b2)
+y = tf.nn.softmax(tf.matmul(x, W) + b)
 
 loss = tf.reduce_sum(tf.square(y_ - y))
 
-train = tf.train.GradientDescentOptimizer(0.01).minimize(loss)  # learning rate: 0.01
+train = tf.train.GradientDescentOptimizer(0.01).minimize(loss)
 
-#init = tf.initialize_all_variables()
 init = tf.global_variables_initializer()
 
 sess = tf.Session()
 sess.run(init)
 
-print ("----------------------")
-print ("   Start training...  ")
-print ("----------------------")
-
-batch_size = 20
-
-for epoch in range(100):
-    for jj in range(int(len(x_dataTrain) / batch_size)):
-        batch_xsTrain = x_dataTrain[jj * batch_size: jj * batch_size + batch_size]
-        batch_ysTrain = y_dataTrain[jj * batch_size: jj * batch_size + batch_size]
+batchSize = 20
+actualLoss = 9999
+previousLoss = 9999
+epoch = 0
+while actualLoss <= previousLoss:
+    epoch += 1
+    for conter in range(int(len(xDataTrain) / batchSize)):
+        batch_xsTrain = xDataTrain[conter * batchSize: conter * batchSize + batchSize]
+        batch_ysTrain = yDataTrain[conter * batchSize: conter * batchSize + batchSize]
         sess.run(train, feed_dict={x: batch_xsTrain, y_: batch_ysTrain})
+    previousLoss = actualLoss
+    actualLoss = sess.run(loss, feed_dict={x: xDataValid, y_: yDataValid})
+    print("Epóca: ", epoch, " Error actual: ", actualLoss, "Error Anterior: ", previousLoss)
 
-    print("....................Training....................")
-    print ("Epoch #:", epoch, "Error on train: ", sess.run(loss, feed_dict={x: batch_xsTrain, y_: batch_ysTrain}))
-
-    print("....................Validation....................")
-    print("Epoch #:", epoch, "Error on validation: ", sess.run(loss, feed_dict={x: x_dataVal, y_: y_dataVal}))
-    resultVal = sess.run(y, feed_dict={x: x_dataVal})
-    for b, r in zip(y_dataVal, resultVal):
-        print( b, "-->", r)
-    print("----------------------------------------------------------------------------------")
-print("....................Test....................")
-errorsOnTest = 0
-
-resultTest = sess.run(y, feed_dict={x: x_dataTest})
-for b, r in zip(y_dataTest, resultTest):
+misses = 0
+result = sess.run(y, feed_dict={x: xDataTest})
+for b, r in zip(yDataTest, result):
     if np.argmax(b) != np.argmax(r):
-        errorsOnTest += 1
-    print(b, "-->", r)
-print("----------------------------------------------------------------------------------")
-print("Errors on test:", errorsOnTest)
+        misses += 1
+print("Porcentaje de error: ", misses / len(xDataTest), "Total: ", misses)
